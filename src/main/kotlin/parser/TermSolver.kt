@@ -3,14 +3,14 @@ package parser
 import java.util.*
 
 object TermSolver {
-    private val operators: HashMap<String, Operators> = hashMapOf(
-        "+" to Operators.PLUS,
-        "-" to Operators.MINUS,
-        "*" to Operators.MULTIPLY,
-        "/" to Operators.DIVIDE,
-        "^" to Operators.POW,
-        "_" to Operators.NEGATION,
-        "~" to Operators.SQRT,
+    private val operators: HashMap<String, Operator> = hashMapOf(
+        "+" to BinaryOperator.PLUS,
+        "-" to BinaryOperator.MINUS,
+        "*" to BinaryOperator.MULTIPLY,
+        "/" to BinaryOperator.DIVIDE,
+        "^" to BinaryOperator.POW,
+        "_" to UnaryOperator.NEGATION,
+        "~" to UnaryOperator.SQRT,
     )
 
     private val functions = listOf("sqrt")
@@ -182,17 +182,17 @@ object TermSolver {
     private fun handleOperator(operator: String, stack: Stack<Double>) {
         val operation = operators[operator] ?: error("Unknown operator: $operator")
         when {
-            operation.isUnary -> applyUnaryOperator(operation, stack)
+            operation is UnaryOperator -> applyUnaryOperator(operation, stack)
             else -> applyBinaryOperator(operation, stack)
         }
     }
 
-    private fun applyUnaryOperator(operator: Operators, stack: Stack<Double>) {
+    private fun applyUnaryOperator(operator: Operator, stack: Stack<Double>) {
         require(stack.isNotEmpty()) { "Invalid expression: Unary operator needs one operand" }
         stack.push(operator.compute(stack.pop()))
     }
 
-    private fun applyBinaryOperator(operator: Operators, stack: Stack<Double>) {
+    private fun applyBinaryOperator(operator: Operator, stack: Stack<Double>) {
         require(stack.size >= 2) { "Invalid expression: Binary operator needs two operands" }
         val right = stack.pop()
         val left = stack.pop()

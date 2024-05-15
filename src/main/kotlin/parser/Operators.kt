@@ -1,50 +1,41 @@
 package parser
 
-import java.util.function.DoubleBinaryOperator
-import java.util.function.DoubleUnaryOperator
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-enum class Operators {
-
-    PLUS(1, false, DoubleBinaryOperator { l: Double, r: Double -> l + r }),
-    MINUS(1, false, DoubleBinaryOperator { l: Double, r: Double -> l - r }),
-    MULTIPLY(2, false, DoubleBinaryOperator { l: Double, r: Double -> l * r }),
-    DIVIDE(2, false, DoubleBinaryOperator { l: Double, r: Double -> l / r }),
-    POW(3, true, DoubleBinaryOperator { a: Double, b: Double -> a.pow(b) }),
-    NEGATION(3, DoubleUnaryOperator { operand: Double -> -operand }),
-    SQRT(3, DoubleUnaryOperator { operand -> sqrt(operand) });
-
-
+interface Operator {
     val priority: Int
     val isRightAssociative: Boolean
-    private val binaryOperator: DoubleBinaryOperator?
-    private val unaryOperator: DoubleUnaryOperator?
-    val isUnary: Boolean
+    fun compute(vararg operands: Double): Double
+}
 
-    constructor(priority: Int, rightAssociative: Boolean, binaryOperator: DoubleBinaryOperator) {
-        this.priority = priority
-        isRightAssociative = rightAssociative
-        this.binaryOperator = binaryOperator
-        unaryOperator = null
-        isUnary = false
+enum class UnaryOperator(
+    override val priority: Int, override val isRightAssociative: Boolean, private val unaryOperator: (Double) -> Double
+) : Operator {
+
+    NEGATION(3, true, { operand -> -operand }),
+    SQRT(3, true, { operand -> sqrt(operand) });
+
+    override fun compute(vararg operands: Double): Double {
+        if (operands.size != 1) throw IllegalArgumentException("Unary operator needs exactly one operand")
+        return unaryOperator(operands.first())
     }
+}
 
-    constructor(priority: Int, unaryOperator: DoubleUnaryOperator) {
-        this.priority = priority
-        isRightAssociative = true
-        binaryOperator = null
-        this.unaryOperator = unaryOperator
-        isUnary = true
-    }
+enum class BinaryOperator(
+    override val priority: Int,
+    override val isRightAssociative: Boolean,
+    private val binaryOperator: (Double, Double) -> Double
+) : Operator {
 
-    fun compute(left: Double, right: Double): Double {
-        if (isUnary) throw UnsupportedOperationException("This is a unary operator")
-        return binaryOperator!!.applyAsDouble(left, right)
-    }
+    PLUS(1, false, { l, r -> l + r }),
+    MINUS(1, false, { l, r -> l - r }),
+    MULTIPLY(2, false, { l, r -> l * r }),
+    DIVIDE(2, false, { l, r -> l / r }),
+    POW(3, true, { a, b -> a.pow(b) });
 
-    fun compute(operand: Double): Double {
-        if (!isUnary) throw UnsupportedOperationException("This is a binary operator")
-        return unaryOperator!!.applyAsDouble(operand)
+    override fun compute(vararg operands: Double): Double {
+        if (operands.size != 2) throw IllegalArgumentException("Binary operator needs exactly two operands")
+        return binaryOperator(operands[0], operands[1])
     }
 }
