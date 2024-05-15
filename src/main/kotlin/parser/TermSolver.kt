@@ -67,7 +67,7 @@ object TermSolver {
             when {
                 isFunction(normalizedInfix, index) -> {
                     handleFunction(normalizedInfix, index, opStack, postfix, expectUnary)
-                    index += getFunctionLength(normalizedInfix, index)
+                    index += functions[0].length
                     expectUnary = true
                 }
                 isNonOperator(currentChar, normalizedInfix[index]) -> {
@@ -111,11 +111,6 @@ object TermSolver {
             postfix.add(operand.toString())
             operand.clear()
         }
-    }
-
-    private fun getFunctionLength(input: String, index: Int): Int {
-        val function = input.substring(index, index + 4)
-        return if (function == "sqrt") 4 else 3
     }
 
     private fun isFunction(infix: String, index: Int) = functions.any { infix.startsWith(it, index) }
