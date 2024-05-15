@@ -2,6 +2,11 @@ package parser
 
 import java.util.*
 
+class UnknownOperatorException(message: String) : Exception(message)
+class InvalidExpressionException(message: String) : Exception(message)
+class InsufficientOperandsException(message: String) : Exception(message)
+
+
 object TermSolver {
     private val operators: HashMap<String, Operator> = hashMapOf(
         "+" to BinaryOperator.PLUS,
@@ -14,44 +19,6 @@ object TermSolver {
     )
 
     private val functions = listOf("sqrt")
-
-    private fun handleOperator(
-        operator: String,
-        opStack: Stack<String>,
-        postfix: StringJoiner,
-        expectUnary: Boolean,
-    ) {
-        val operatorToAdd = when {
-            expectUnary && operator == "-" -> "_"
-            expectUnary && operator == "sqrt" -> "~"
-            else -> operator
-        }
-
-        if (shouldPushOperatorToStack(opStack)) {
-            opStack.push(operatorToAdd)
-        } else {
-            processOperatorsInStack(operatorToAdd, opStack, postfix)
-        }
-    }
-
-    private fun shouldPushOperatorToStack(opStack: Stack<String>) = opStack.isEmpty() || opStack.peek() == "("
-
-    private fun processOperatorsInStack(
-        currentOperator: String,
-        opStack: Stack<String>,
-        postfix: StringJoiner,
-    ) {
-        val currentOp = operators[currentOperator] ?: error("Operator not defined: $currentOperator")
-
-        while (opStack.isNotEmpty() && opStack.peek() != "(") {
-            val stackOp = operators[opStack.peek()] ?: error("Operator not defined on stack")
-            if (currentOp.priority > stackOp.priority || (currentOp.priority == stackOp.priority && currentOp.isRightAssociative)) {
-                break
-            }
-            postfix.add(opStack.pop())
-        }
-        opStack.push(currentOperator)
-    }
 
     fun transformInfixToPostfix(input: String): Optional<String> {
         val normalizedInfix = input.replace(" ", "")
@@ -70,10 +37,12 @@ object TermSolver {
                     index += functions[0].length
                     expectUnary = true
                 }
+
                 isNonOperator(currentChar, normalizedInfix[index]) -> {
                     handleNonOperator(normalizedInfix, index, operand, postfix)
                     index++
                 }
+
                 else -> {
                     flushOperand(operand, postfix)
                     processCharacter(currentChar, opStack, postfix, expectUnary)
@@ -87,6 +56,39 @@ object TermSolver {
         return Optional.of(postfix.toString())
     }
 
+    fun solvePostfix(input: String): Double {
+        val tokens = input.split(" ").filterNot { it.isEmpty() }
+        val stack = Stack<Double>()
+
+        tokens.forEach { token ->
+            processToken(token, stack)
+        }
+
+        return when {
+            stack.size == 1 -> stack.pop()
+            else -> throw InvalidExpressionException("Invalid expression")
+        }
+    }
+
+    private fun processOperatorForPostfix(
+        operator: String,
+        opStack: Stack<String>,
+        postfix: StringJoiner,
+        expectUnary: Boolean,
+    ) {
+        val operatorToAdd = when {
+            expectUnary && operator == "-" -> "_"
+            expectUnary && operator == "sqrt" -> "~"
+            else -> operator
+        }
+
+        if (shouldPushOperatorToStack(opStack)) {
+            opStack.push(operatorToAdd)
+        } else {
+            processOperatorsInStack(operatorToAdd, opStack, postfix)
+        }
+    }
+
     private fun handleFunction(
         input: String,
         index: Int,
@@ -96,7 +98,7 @@ object TermSolver {
     ) {
         val (function, _) = getFunction(input, index)
         when (function) {
-            "sqrt" -> handleOperator("~", opStack, postfix, expectUnary)
+            "sqrt" -> processOperatorForPostfix("~", opStack, postfix, expectUnary)
         }
     }
 
@@ -113,12 +115,41 @@ object TermSolver {
         }
     }
 
-    private fun isFunction(infix: String, index: Int) = functions.any { infix.startsWith(it, index) }
+    private fun applyOperatorToStack(operator: String, stack: Stack<Double>) {
+        val operation = operators[operator] ?: throw UnknownOperatorException("Unknown operator: $operator")
+        when (operation) {
+            is UnaryOperator -> applyUnaryOperator(operation, stack)
+            is BinaryOperator -> applyBinaryOperator(operation, stack)
+            else -> throw InvalidExpressionException("Unsupported operation type")
+        }
+    }
+
+    private fun shouldPushOperatorToStack(opStack: Stack<String>) = opStack.isEmpty() || opStack.peek() == "("
+
+    private fun processOperatorsInStack(
+        currentOperator: String,
+        opStack: Stack<String>,
+        postfix: StringJoiner,
+    ) {
+        val currentOp =
+            operators[currentOperator] ?: throw UnknownOperatorException("Operator not defined: $currentOperator")
+
+        while (opStack.isNotEmpty() && opStack.peek() != "(") {
+            val stackOp = operators[opStack.peek()] ?: throw UnknownOperatorException("Operator not defined on stack")
+            if (currentOp.priority > stackOp.priority || (currentOp.priority == stackOp.priority && currentOp.isRightAssociative)) {
+                break
+            }
+            postfix.add(opStack.pop())
+        }
+        opStack.push(currentOperator)
+    }
 
     private fun getFunction(infix: String, index: Int): Pair<String, Int> {
         val matchingFunction = functions.firstOrNull { infix.startsWith(it, index) }
         return Pair(matchingFunction ?: "", matchingFunction?.length ?: 0)
     }
+
+    private fun isFunction(infix: String, index: Int) = functions.any { infix.startsWith(it, index) }
 
     private fun isNonOperator(current: String, char: Char) =
         !operators.containsKey(current) && char != '(' && char != ')' && current != "~"
@@ -136,8 +167,8 @@ object TermSolver {
         when (current) {
             "(" -> opStack.push(current)
             ")" -> flushParentheses(opStack, postfix)
-            in operators.keys -> handleOperator(current, opStack, postfix, expectUnary)
-            else -> error("Unknown operator: $current")
+            in operators.keys -> processOperatorForPostfix(current, opStack, postfix, expectUnary)
+            else -> throw UnknownOperatorException("Unknown operator: $current")
         }
     }
 
@@ -154,43 +185,22 @@ object TermSolver {
         }
     }
 
-    fun solvePostfix(input: String): Double {
-        val tokens = input.split(" ").filterNot { it.isEmpty() }
-        val stack = Stack<Double>()
-
-        tokens.forEach { token ->
-            processToken(token, stack)
-        }
-
-        return when {
-            stack.size == 1 -> stack.pop()
-            else -> error("Invalid expression")
-        }
-    }
-
     private fun processToken(token: String, stack: Stack<Double>) {
         token.toDoubleOrNull()?.let {
             stack.push(it)
-        } ?: handleOperator(token, stack)
-    }
-
-    private fun handleOperator(operator: String, stack: Stack<Double>) {
-        val operation = operators[operator] ?: error("Unknown operator: $operator")
-        when {
-            operation is UnaryOperator -> applyUnaryOperator(operation, stack)
-            else -> applyBinaryOperator(operation, stack)
-        }
+        } ?: applyOperatorToStack(token, stack)
     }
 
     private fun applyUnaryOperator(operator: Operator, stack: Stack<Double>) {
-        require(stack.isNotEmpty()) { "Invalid expression: Unary operator needs one operand" }
+        if (stack.isEmpty()) throw InsufficientOperandsException("Invalid expression: Unary operator '${operator}' needs one operand.")
         stack.push(operator.compute(stack.pop()))
     }
 
     private fun applyBinaryOperator(operator: Operator, stack: Stack<Double>) {
-        require(stack.size >= 2) { "Invalid expression: Binary operator needs two operands" }
+        if (stack.size < 2) throw InsufficientOperandsException("Invalid expression: Binary operator '${operator}' needs two operands.")
         val right = stack.pop()
         val left = stack.pop()
         stack.push(operator.compute(left, right))
     }
+
 }

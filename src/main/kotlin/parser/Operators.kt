@@ -6,6 +6,7 @@ import kotlin.math.sqrt
 interface Operator {
     val priority: Int
     val isRightAssociative: Boolean
+
     fun compute(vararg operands: Double): Double
 }
 
